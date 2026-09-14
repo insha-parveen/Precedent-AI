@@ -1,0 +1,8 @@
+{"query": "clause specifying which state or country's law governs the agreement", "expected_clause_type": "Governing Law", "k": 10}
+{"query": "restriction on a party competing with the other after the deal ends", "expected_clause_type": "Non-Compete", "k": 10}
+{"query": "either party can end the contract for any reason with notice", "expected_clause_type": "Termination For Convenience", "k": 10}
+{"query": "total liability is capped at a fixed amount or fees paid", "expected_clause_type": "Cap On Liability", "k": 10}
+{"query": "consent required if a party is acquired or merges with someone else", "expected_clause_type": "Change Of Control", "k": 10}
+{"query": "customer guaranteed the best pricing offered to any other customer", "expected_clause_type": "Most Favored Nation", "k": 10}
+{"query": "one party can inspect the other's books and records", "expected_clause_type": "Audit Rights", "k": 10}
+{"query": "restriction on transferring or assigning the contract to someone else", "expected_clause_type": "Anti-Assignment", "k": 10}
