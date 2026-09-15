@@ -29,6 +29,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import sys
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -50,7 +51,7 @@ METADATA_COLUMNS = {"Filename", "Document Name", "Document Name-Answer"}
 CONTEXT_COLUMN_SUFFIX = ""  # e.g. set to "" if context columns are the bare category
 # name and answers are in "<Category>-Answer" — inspect columns first, adjust here.
 
-BATCH_SIZE = 64  # Voyage batches embedding calls; keep well under their per-request cap
+BATCH_SIZE = 32  # Voyage batches embedding calls; conservative size for steady throughput
 
 
 def _require_columns(df: pd.DataFrame) -> None:
