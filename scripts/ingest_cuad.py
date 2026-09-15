@@ -124,17 +124,35 @@ async def main() -> None:
     voyage = voyageai.Client(api_key=settings.voyage_api_key)
     pool = await get_pool()
 
+    # Query already ingested documents to allow safe resumption
+    async with pool.acquire() as conn:
+        existing_filenames = set(
+            await conn.fetchval(
+                """
+                SELECT COALESCE(array_agg(external_id), '{}')
+                FROM documents
+                WHERE id IN (SELECT DISTINCT document_id FROM clauses)
+                """
+            )
+        )
+        total_existing_clauses = await conn.fetchval("SELECT count(*) FROM clauses;")
+
+    if existing_filenames:
+        print(f"Resuming: {len(existing_filenames)} contracts ({total_existing_clauses} clauses) already in database.")
+
+    inserted_clauses = total_existing_clauses
     pending_texts: list[str] = []
     pending_meta: list[tuple[int, str, str]] = []  # (document_id, clause_type, text)
 
     async def flush_batch() -> None:
+        nonlocal inserted_clauses
         if not pending_texts:
             return
-        result = voyage.embed(
-            pending_texts, model=settings.embedding_model, input_type="document"
+        embeddings = _embed_with_retry(
+            voyage, pending_texts, model=settings.embedding_model, input_type="document"
         )
         async with pool.acquire() as conn:
-            for (doc_id, clause_type, text), emb in zip(pending_meta, result.embeddings):
+            for (doc_id, clause_type, text), emb in zip(pending_meta, embeddings):
                 await conn.execute(
                     """
                     INSERT INTO clauses (document_id, clause_type, clause_text, embedding)
@@ -145,11 +163,16 @@ async def main() -> None:
                     text,
                     emb,
                 )
+        inserted_clauses += len(pending_texts)
+        print(f"  -> Total clauses indexed: {inserted_clauses}...", flush=True)
         pending_texts.clear()
         pending_meta.clear()
 
     for _, row in df.iterrows():
         filename = str(row["Filename"])
+        if filename in existing_filenames:
+            continue
+
         parties_raw = row.get("Parties", "")
         parties = _parse_span_list(parties_raw)
 
@@ -175,7 +198,7 @@ async def main() -> None:
                     await flush_batch()
 
     await flush_batch()
-    print("Ingestion complete. Run: python eval/run_eval.py")
+    print(f"Ingestion complete! Total clauses indexed: {inserted_clauses}. Run: python eval/run_eval.py")
 
 
 if __name__ == "__main__":
