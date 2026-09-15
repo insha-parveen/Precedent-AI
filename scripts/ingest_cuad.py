@@ -64,7 +64,12 @@ def _require_columns(df: pd.DataFrame) -> None:
 
 
 def _clause_category_columns(df: pd.DataFrame) -> list[str]:
-    return [c for c in df.columns if c not in METADATA_COLUMNS and not c.endswith("-Answer")]
+    return [
+        c
+        for c in df.columns
+        if c not in METADATA_COLUMNS
+        and not (c.endswith("-Answer") or c.endswith("- Answer") or c.strip().endswith("Answer"))
+    ]
 
 
 def _parse_span_list(cell) -> list[str]:
