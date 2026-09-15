@@ -88,6 +88,30 @@ def _parse_span_list(cell) -> list[str]:
     return [str(cell).strip()]
 
 
+def _embed_with_retry(
+    client: voyageai.Client,
+    texts: list[str],
+    model: str,
+    input_type: str = "document",
+    max_retries: int = 20,
+) -> list[list[float]]:
+    """Calls Voyage AI embed with backoff retry on RateLimitError and transient network errors."""
+    for attempt in range(max_retries):
+        try:
+            res = client.embed(texts, model=model, input_type=input_type)
+            return res.embeddings
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "rate" in err_msg or isinstance(e, getattr(voyageai.error, "RateLimitError", ())):
+                wait_s = 22.0
+                print(f"    [Rate limit on attempt {attempt + 1}/{max_retries}: sleeping {wait_s}s...]", flush=True)
+            else:
+                wait_s = 5.0 * (attempt + 1)
+                print(f"    [Transient error ({type(e).__name__}: {e}) on attempt {attempt + 1}/{max_retries}: sleeping {wait_s}s...]", flush=True)
+            time.sleep(wait_s)
+    raise RuntimeError(f"Failed to embed batch after {max_retries} attempts.")
+
+
 async def main() -> None:
     if not CSV_PATH.exists():
         raise SystemExit(f"Missing {CSV_PATH} — see this script's module docstring.")
