@@ -67,7 +67,7 @@ async def main() -> None:
         table.add_row(
             q["query"][:60] + ("..." if len(q["query"]) > 60 else ""),
             q["expected_clause_type"],
-            "✓" if hit else "✗",
+            "YES" if hit else "NO",
             str(rank) if rank else "-",
             str(latency_ms),
         )

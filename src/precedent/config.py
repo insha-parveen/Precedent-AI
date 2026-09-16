@@ -3,7 +3,12 @@ value — only where to read it from.
 """
 from __future__ import annotations
 
+from pathlib import Path
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Load project .env with override so local precedent settings take precedence over global env vars
+load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 
 
 class Settings(BaseSettings):
@@ -14,7 +19,7 @@ class Settings(BaseSettings):
     voyage_api_key: str
 
     # Database
-    database_url: str = "postgresql://precedent:precedent@localhost:5433/precedent"
+    database_url: str = "postgresql://precedent:precedent@localhost:5434/precedent"
 
     # Models
     agent_model: str = "claude-sonnet-5"

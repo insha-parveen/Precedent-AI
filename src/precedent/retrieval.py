@@ -9,6 +9,7 @@ Two rules for anything added to this file:
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 import asyncpg
@@ -31,13 +32,20 @@ class ClauseResult:
     score: float = 0.0
 
 
-def embed_query(text: str) -> list[float]:
-    """Embed a query string. input_type='query' matters — Voyage prepends a different
-    instruction prefix for queries vs. documents, and mixing them up quietly degrades
-    retrieval quality without throwing an error, which makes it an easy mistake to miss.
+def embed_query(text: str, max_retries: int = 10) -> list[float]:
+    """Embed a query string with backoff retry on rate limits. input_type='query' matters
+    — Voyage prepends a different instruction prefix for queries vs. documents.
     """
-    result = _voyage.embed([text], model=settings.embedding_model, input_type="query")
-    return result.embeddings[0]
+    for attempt in range(max_retries):
+        try:
+            result = _voyage.embed([text], model=settings.embedding_model, input_type="query")
+            return result.embeddings[0]
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise e
+            wait_s = 21.0
+            time.sleep(wait_s)
+    raise RuntimeError("Failed to embed query after retries.")
 
 
 async def hybrid_search(
@@ -86,6 +94,8 @@ async def hybrid_search(
             FROM clauses c
             JOIN documents d ON d.id = c.document_id
             WHERE {where_clause}
+            ORDER BY c.embedding <=> $1
+            LIMIT 60
         ),
         text_ranked AS (
             SELECT c.id, ROW_NUMBER() OVER (
@@ -94,6 +104,8 @@ async def hybrid_search(
             FROM clauses c
             JOIN documents d ON d.id = c.document_id
             WHERE {where_clause} AND c.tsv @@ plainto_tsquery('english', $2)
+            ORDER BY ts_rank(c.tsv, plainto_tsquery('english', $2)) DESC
+            LIMIT 60
         ),
         fused AS (
             SELECT id, SUM(1.0 / (60 + rnk)) AS score

@@ -29,6 +29,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import sys
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -50,7 +51,7 @@ METADATA_COLUMNS = {"Filename", "Document Name", "Document Name-Answer"}
 CONTEXT_COLUMN_SUFFIX = ""  # e.g. set to "" if context columns are the bare category
 # name and answers are in "<Category>-Answer" — inspect columns first, adjust here.
 
-BATCH_SIZE = 64  # Voyage batches embedding calls; keep well under their per-request cap
+BATCH_SIZE = 32  # Voyage batches embedding calls; conservative size for steady throughput
 
 
 def _require_columns(df: pd.DataFrame) -> None:
@@ -63,7 +64,12 @@ def _require_columns(df: pd.DataFrame) -> None:
 
 
 def _clause_category_columns(df: pd.DataFrame) -> list[str]:
-    return [c for c in df.columns if c not in METADATA_COLUMNS and not c.endswith("-Answer")]
+    return [
+        c
+        for c in df.columns
+        if c not in METADATA_COLUMNS
+        and not (c.endswith("-Answer") or c.endswith("- Answer") or c.strip().endswith("Answer"))
+    ]
 
 
 def _parse_span_list(cell) -> list[str]:
@@ -82,6 +88,30 @@ def _parse_span_list(cell) -> list[str]:
     return [str(cell).strip()]
 
 
+def _embed_with_retry(
+    client: voyageai.Client,
+    texts: list[str],
+    model: str,
+    input_type: str = "document",
+    max_retries: int = 20,
+) -> list[list[float]]:
+    """Calls Voyage AI embed with backoff retry on RateLimitError and transient network errors."""
+    for attempt in range(max_retries):
+        try:
+            res = client.embed(texts, model=model, input_type=input_type)
+            return res.embeddings
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "rate" in err_msg or isinstance(e, getattr(voyageai.error, "RateLimitError", ())):
+                wait_s = 22.0
+                print(f"    [Rate limit on attempt {attempt + 1}/{max_retries}: sleeping {wait_s}s...]", flush=True)
+            else:
+                wait_s = 5.0 * (attempt + 1)
+                print(f"    [Transient error ({type(e).__name__}: {e}) on attempt {attempt + 1}/{max_retries}: sleeping {wait_s}s...]", flush=True)
+            time.sleep(wait_s)
+    raise RuntimeError(f"Failed to embed batch after {max_retries} attempts.")
+
+
 async def main() -> None:
     if not CSV_PATH.exists():
         raise SystemExit(f"Missing {CSV_PATH} — see this script's module docstring.")
@@ -94,17 +124,35 @@ async def main() -> None:
     voyage = voyageai.Client(api_key=settings.voyage_api_key)
     pool = await get_pool()
 
+    # Query already ingested documents to allow safe resumption
+    async with pool.acquire() as conn:
+        existing_filenames = set(
+            await conn.fetchval(
+                """
+                SELECT COALESCE(array_agg(external_id), '{}')
+                FROM documents
+                WHERE id IN (SELECT DISTINCT document_id FROM clauses)
+                """
+            )
+        )
+        total_existing_clauses = await conn.fetchval("SELECT count(*) FROM clauses;")
+
+    if existing_filenames:
+        print(f"Resuming: {len(existing_filenames)} contracts ({total_existing_clauses} clauses) already in database.")
+
+    inserted_clauses = total_existing_clauses
     pending_texts: list[str] = []
     pending_meta: list[tuple[int, str, str]] = []  # (document_id, clause_type, text)
 
     async def flush_batch() -> None:
+        nonlocal inserted_clauses
         if not pending_texts:
             return
-        result = voyage.embed(
-            pending_texts, model=settings.embedding_model, input_type="document"
+        embeddings = _embed_with_retry(
+            voyage, pending_texts, model=settings.embedding_model, input_type="document"
         )
         async with pool.acquire() as conn:
-            for (doc_id, clause_type, text), emb in zip(pending_meta, result.embeddings):
+            for (doc_id, clause_type, text), emb in zip(pending_meta, embeddings):
                 await conn.execute(
                     """
                     INSERT INTO clauses (document_id, clause_type, clause_text, embedding)
@@ -115,11 +163,16 @@ async def main() -> None:
                     text,
                     emb,
                 )
+        inserted_clauses += len(pending_texts)
+        print(f"  -> Total clauses indexed: {inserted_clauses}...", flush=True)
         pending_texts.clear()
         pending_meta.clear()
 
     for _, row in df.iterrows():
         filename = str(row["Filename"])
+        if filename in existing_filenames:
+            continue
+
         parties_raw = row.get("Parties", "")
         parties = _parse_span_list(parties_raw)
 
@@ -145,7 +198,7 @@ async def main() -> None:
                     await flush_batch()
 
     await flush_batch()
-    print("Ingestion complete. Run: python eval/run_eval.py")
+    print(f"Ingestion complete! Total clauses indexed: {inserted_clauses}. Run: python eval/run_eval.py")
 
 
 if __name__ == "__main__":
