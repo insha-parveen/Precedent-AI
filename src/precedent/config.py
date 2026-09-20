@@ -14,9 +14,14 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # Required secrets
-    anthropic_api_key: str
-    voyage_api_key: str
+    # Secrets
+    anthropic_api_key: str = ""
+    voyage_api_key: str = ""
+    gemini_api_key: str = ""
+    openai_api_key: str = ""
+    grok_api_key: str = ""
+    grok_base_url: str = "https://api.x.ai/v1"
+    grok_model: str = "grok-beta"
 
     # Database
     database_url: str = "postgresql://precedent:precedent@localhost:5434/precedent"

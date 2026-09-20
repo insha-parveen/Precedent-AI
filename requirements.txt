@@ -1,6 +1,12 @@
 # Anthropic
 anthropic>=0.40.0
 
+# Google GenAI (Gemini)
+google-genai>=0.8.0
+
+# OpenAI / xAI Grok (OpenAI-compatible)
+openai>=1.40.0
+
 # MCP (official Python SDK — low-level Server API, no extra framework dependency)
 mcp>=1.2.0
 
