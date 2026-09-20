@@ -144,6 +144,25 @@ async def hybrid_search(
     ]
 
 
+def rerank(query: str, candidates: list[ClauseResult], model: str = "rerank-2") -> list[ClauseResult]:
+    """Rerank candidates using Voyage."""
+    if not candidates:
+        return []
+
+    texts = [c.clause_text for c in candidates]
+    results = _voyage.rerank(query=query, documents=texts, model=model)
+
+    # Voyage rerank results are sorted by relevance score
+    ranked_candidates = []
+    for res in results.results:
+        # res has 'index' and 'relevance_score'
+        candidate = candidates[res.index]
+        candidate.score = res.relevance_score
+        ranked_candidates.append(candidate)
+
+    return ranked_candidates
+
+
 async def get_document(
     pool: asyncpg.Pool, document_id: int, *, access_groups: list[str]
 ) -> dict | None:
