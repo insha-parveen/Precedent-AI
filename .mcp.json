@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "precedent": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "-m",
+        "src.precedent.mcp_server"
+      ],
+      "env": {}
+    }
+  }
+}
