@@ -137,11 +137,25 @@ class GeminiProvider:
         if function_declarations:
             config.tools = [{"function_declarations": function_declarations}]
 
-        response = self.client.models.generate_content(
-            model=model or "gemini-3.1-flash-lite",
-            contents=contents,
-            config=config
-        )
+        response = None
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                response = self.client.models.generate_content(
+                    model=model or "gemini-3.1-flash-lite",
+                    contents=contents,
+                    config=config
+                )
+                break
+            except Exception as exc:
+                if is_transient_error(exc) and attempt < max_attempts - 1:
+                    logger.warning(
+                        f"Gemini generate_content transient error: {exc}. "
+                        f"Retrying attempt {attempt + 2}/{max_attempts}..."
+                    )
+                    time.sleep(2.0 * (attempt + 1))
+                    continue
+                raise exc
 
         content_items = []
         tool_calls = []

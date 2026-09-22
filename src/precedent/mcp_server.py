@@ -22,6 +22,7 @@ rather than trusting the client to say who it is — see CLAUDE.md rule 3.
 from __future__ import annotations
 
 import asyncio
+import json
 
 from mcp.server.mcpserver import MCPServer
 
@@ -45,7 +46,7 @@ server = MCPServer(
 async def ask_precedent(query: str) -> str:
     """Ask a question about the contract corpus in natural language. Routes to the
     right specialized skill (precedent lookup, negotiation history, or risk flagging),
-    retrieves, verifies grounding, and returns a cited answer.
+    retrieves, verifies grounding, and returns a cited answer with [doc:ID] markers.
     """
     pool = await get_pool()
     result = await agent.run_query(pool, query, access_groups=ACCESS_GROUPS)
@@ -87,12 +88,12 @@ async def search_contracts(
 
 @server.tool()
 async def get_document(document_id: int) -> str:
-    """Fetch a full document plus all its labeled clauses by document_id."""
+    """Fetch a full document plus all its labeled clauses by document_id in structured JSON format."""
     pool = await get_pool()
     doc = await retrieval.get_document(pool, document_id, access_groups=ACCESS_GROUPS)
     if doc is None:
         return "Not found or not accessible."
-    return str(doc)
+    return json.dumps(doc, indent=2, default=str)
 
 
 def main() -> None:
