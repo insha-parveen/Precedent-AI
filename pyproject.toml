@@ -8,3 +8,12 @@ name = "precedent"
 version = "0.1.0"
 description = "Retrieval-first contract-intelligence agent, architecturally modeled on DeepJudge."
 requires-python = ">=3.11"
+
+[project.scripts]
+precedent = "precedent.cli:main"
+
+[tool.setuptools]
+packages = ["precedent"]
+package-dir = {"" = "src"}
+
+
