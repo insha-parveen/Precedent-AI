@@ -55,6 +55,18 @@ python eval/run_eval.py
 
 # 7. Run the MCP server
 python -m src.precedent.mcp_server
+
+## CLI
+
+The same Precedent capabilities (search, ask, document lookup) are available via the terminal:
+
+```bash
+precedent search "governing law in IP agreements"
+precedent ask "Find precedent for governing law in IP agreements."
+precedent document <document_id>
+```
+
+The CLI, Web UI, and MCP server all reuse the same core Precedent services for retrieval, agency, and governance.
 ```
 
 ## License note
