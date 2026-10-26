@@ -1,7 +1,9 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-import sys
+
 from src.precedent import cli
+
 
 @pytest.mark.asyncio
 async def test_search_cmd():
