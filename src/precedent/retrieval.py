@@ -30,6 +30,7 @@ class ClauseResult:
     doc_type: str | None
     parties: list[str] = field(default_factory=list)
     score: float = 0.0
+    category_id: int | None = None  # Reference to clause_categories table
 
 
 def embed_query(text: str, max_retries: int = 10) -> list[float]:
@@ -57,6 +58,7 @@ async def hybrid_search(
     doc_type: str | None = None,
     parties: list[str] | None = None,
     limit: int = 10,
+    do_rerank: bool | None = None,
 ) -> list[ClauseResult]:
     """Combine vector similarity and keyword (full-text) search via reciprocal rank
     fusion, then apply structured filters. access_groups is required and non-optional —
@@ -80,8 +82,12 @@ async def hybrid_search(
         params.append(parties)
         conditions.append(f"d.parties && ${len(params)}::text[]")
 
+    # Determine if we should rerank: explicit arg takes precedence, otherwise use config
+    should_rerank = do_rerank if do_rerank is not None else (settings.rerank_candidates > 0)
+    fetch_limit = settings.rerank_candidates if should_rerank else limit
+
     where_clause = " AND ".join(conditions)
-    params.append(limit)
+    params.append(fetch_limit)
     limit_param = f"${len(params)}"
 
     # Reciprocal rank fusion (k=60, the standard default): rank by vector distance and
@@ -129,7 +135,7 @@ async def hybrid_search(
     async with pool.acquire() as conn:
         rows = await conn.fetch(sql, *params)
 
-    return [
+    candidates = [
         ClauseResult(
             clause_id=r["clause_id"],
             document_id=r["document_id"],
@@ -139,9 +145,17 @@ async def hybrid_search(
             doc_type=r["doc_type"],
             parties=list(r["parties"] or []),
             score=float(r["score"]),
+            category_id=r["category_id"] if "category_id" in r.keys() else None,
         )
         for r in rows
     ]
+
+    # Apply reranking if enabled
+    if should_rerank and candidates:
+        candidates = rerank(query_text, candidates)
+        candidates = candidates[:limit]
+
+    return candidates
 
 
 def rerank(query: str, candidates: list[ClauseResult], model: str = "rerank-2") -> list[ClauseResult]:

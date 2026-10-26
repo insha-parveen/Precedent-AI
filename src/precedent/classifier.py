@@ -1,8 +1,8 @@
 """Clause classifier for EDGAR documents.
 
 Uses Haiku (Anthropic) via the existing LLMProvider abstraction to classify
-raw contract text chunks into the CUAD 41-category taxonomy. This is the first
-time the classifier_model (Haiku) is exercised in the Precedent pipeline.
+raw contract text chunks into a taxonomy of contract clause categories. The
+taxonomy can be extended beyond the default CUAD 41 categories.
 
 The classifier is designed for cost-efficient batch classification with a
 confidence threshold — low-confidence predictions fall back to "Other".
@@ -10,17 +10,16 @@ confidence threshold — low-confidence predictions fall back to "Other".
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from typing import Literal
-
 import sys
+from pathlib import Path
+from typing import List, Dict, Optional
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from src.precedent.providers import AnthropicProvider, ProviderResponse  # noqa: E402
 from src.precedent.config import settings  # noqa: E402
+from src.precedent.providers import AnthropicProvider, ProviderResponse  # noqa: E402
 
-
-# CUAD's 41 clause categories — must match the taxonomy used in ingestion
-CUAD_CATEGORIES = [
+# Default taxonomy: CUAD's 41 clause categories
+DEFAULT_CUAD_CATEGORIES = [
     "Affiliate License-Licensee",
     "Affiliate License-Licensor",
     "Anti-Assignment",
@@ -67,8 +66,8 @@ CUAD_CATEGORIES = [
     "Warranty Duration",
 ]
 
-# For classification, we group similar categories to reduce confusion
-CATEGORY_DEFINITIONS = {
+# Default category definitions for the CUAD taxonomy
+DEFAULT_CATEGORY_DEFINITIONS = {
     "Governing Law": "Which jurisdiction's law governs the contract",
     "Termination For Convenience": "Either party can terminate without cause with notice",
     "Termination For Cause": "Termination rights triggered by breach or specific events",
@@ -115,10 +114,18 @@ CATEGORY_DEFINITIONS = {
     "Affiliate License-Licensor": "Affiliate license terms (licensor side)",
 }
 
-# Build the classification prompt
-CLASSIFICATION_PROMPT = f"""You are a legal contract classifier. Classify the following contract clause text into ONE of these 41 categories:
 
-{chr(10).join(f'- {cat}: {CATEGORY_DEFINITIONS.get(cat, "General contract provision")}' for cat in CUAD_CATEGORIES)}
+def _build_classification_prompt(categories: List[str], definitions: Dict[str, str]) -> str:
+    """Build the classification prompt for the given categories and definitions."""
+    lines = []
+    for cat in categories:
+        definition = definitions.get(cat, "General contract provision")
+        lines.append(f'- {cat}: {definition}')
+    categories_text = chr(10).join(lines)
+
+    return f"""You are a legal contract classifier. Classify the following contract clause text into ONE of these categories:
+
+{categories_text}
 
 Respond with ONLY a JSON object:
 {{
@@ -131,24 +138,39 @@ If the text doesn't clearly fit any category, use "Other" as the category with l
 """
 
 
-async def classify_clause(text: str) -> str:
-    """Classify a single clause text into a CUAD category using Haiku.
+async def classify_clause(
+    text: str,
+    categories: Optional[List[str]] = None,
+    category_definitions: Optional[Dict[str, str]] = None
+) -> str:
+    """Classify a single clause text into a category using Haiku.
 
     Args:
         text: The clause text to classify (up to ~2000 chars)
+        categories: Optional list of category names to classify into. If not provided, uses default CUAD categories.
+        category_definitions: Optional dict mapping category name to definition. If not provided, uses default CUAD definitions.
 
     Returns:
-        Category name (one of CUAD_CATEGORIES or "Other")
+        Category name (one of the provided categories or "Other")
     """
+    # Use defaults if not provided
+    if categories is None:
+        categories = DEFAULT_CUAD_CATEGORIES
+    if category_definitions is None:
+        category_definitions = DEFAULT_CATEGORY_DEFINITIONS
+
     # Truncate if too long
     text = text[:2000]
 
     provider = AnthropicProvider(api_key=settings.anthropic_api_key or "dummy")
 
+    # Build the prompt dynamically
+    system_prompt = _build_classification_prompt(categories, category_definitions)
+
     # Use Haiku for cost efficiency
     try:
         response: ProviderResponse = provider.create_message(
-            system=CLASSIFICATION_PROMPT,
+            system=system_prompt,
             messages=[{"role": "user", "content": text}],
             model=settings.classifier_model,
         )
@@ -161,7 +183,7 @@ async def classify_clause(text: str) -> str:
         confidence = float(result.get("confidence", 0.0))
 
         # Only accept high-confidence predictions
-        if confidence >= 0.7 and category in CUAD_CATEGORIES:
+        if confidence >= 0.7 and category in categories:
             return category
         return "Other"
     except (json.JSONDecodeError, KeyError, ValueError):
@@ -172,15 +194,24 @@ async def classify_clause(text: str) -> str:
         return "Other"
 
 
-async def classify_batch(texts: list[str]) -> list[str]:
+async def classify_batch(
+    texts: List[str],
+    categories: Optional[List[str]] = None,
+    category_definitions: Optional[Dict[str, str]] = None
+) -> List[str]:
     """Classify multiple clauses efficiently.
+
+    Args:
+        texts: List of clause texts to classify
+        categories: Optional list of category names to classify into. If not provided, uses default CUAD categories.
+        category_definitions: Optional dict mapping category name to definition. If not provided, uses default CUAD definitions.
 
     Note: For production bulk classification, use Anthropic's Batch API.
     This sequential version is fine for pilot-scale ingestion.
     """
     results = []
     for text in texts:
-        category = await classify_clause(text)
+        category = await classify_clause(text, categories, category_definitions)
         results.append(category)
     return results
 

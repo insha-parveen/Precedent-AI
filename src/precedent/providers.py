@@ -1,9 +1,9 @@
-from typing import Protocol, Any, List, Optional, Dict
-from dataclasses import dataclass, field
 import json
 import logging
-import re
 import time
+from dataclasses import dataclass, field
+from typing import Any, Protocol
+
 from .config import settings
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ class LLMProvider(Protocol):
 
 import anthropic
 from google import genai
+
 
 class GeminiProvider:
     def __init__(self, api_key: str):
@@ -255,6 +256,7 @@ class AnthropicProvider:
         )
 
 import openai
+
 
 class GrokProvider:
     """Provider for xAI Grok or OpenAI-compatible endpoints."""
