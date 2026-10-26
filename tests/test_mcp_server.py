@@ -1,21 +1,42 @@
 """MCP server unit and contract tests (offline, no database or network needed)."""
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from src.precedent.agent import AgentResult
 from src.precedent.mcp_server import (
-    server,
     ask_precedent,
-    search_contracts,
     get_document,
+    search_contracts,
+    server,
 )
 from src.precedent.retrieval import ClauseResult
-from src.precedent.agent import AgentResult
 
 
 def test_mcp_server_initialization_and_tools():
     assert server.name == "precedent"
     assert "retrieval-first" in server.instructions
+
+
+def test_mcp_bad_token_fails_closed(monkeypatch):
+    """An invalid PRECEDENT_MCP_TOKEN must raise, never silently downgrade to public."""
+    from src.precedent.mcp_server import get_mcp_access_groups
+    from src.precedent.exceptions import AuthenticationError
+
+    monkeypatch.setenv("PRECEDENT_MCP_TOKEN", "invalid.token.value")
+    with pytest.raises(AuthenticationError):
+        get_mcp_access_groups()
+
+
+def test_mcp_no_token_public_fallback(monkeypatch):
+    """No token + production env → public access groups (secure default)."""
+    from src.precedent.mcp_server import get_mcp_access_groups
+    from src.precedent import config as config_module
+
+    monkeypatch.delenv("PRECEDENT_MCP_TOKEN", raising=False)
+    monkeypatch.setattr(config_module.settings, "precedent_env", "production")
+    assert get_mcp_access_groups() == ["public"]
 
 
 @pytest.mark.asyncio
