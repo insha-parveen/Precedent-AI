@@ -14,6 +14,8 @@ data/cache/
 eval/results/
 .coverage
 htmlcov/
-CLAUDE.md
-.claude/
-docs/
+
+# Node / Next.js
+node_modules/
+.next/
+*.tsbuildinfo
