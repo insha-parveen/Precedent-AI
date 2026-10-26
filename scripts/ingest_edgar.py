@@ -14,9 +14,8 @@ Target filing types:
 from __future__ import annotations
 
 import asyncio
-import json
 import re
-import time
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -24,11 +23,10 @@ from typing import Optional
 import aiohttp
 import asyncpg
 
-import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from src.precedent.config import settings  # noqa: E402
-from src.precedent.db import get_pool  # noqa: E402
 from src.precedent.classifier import classify_clause  # noqa: E402
+from src.precedent.db import get_pool  # noqa: E402
+from src.precedent.ingestion.chunking import chunk_into_clauses, ClauseChunk  # noqa: E402
 
 # Conservative rate limiting: SEC allows 10 req/sec, we'll do ~5/sec
 REQUEST_DELAY = 0.2
@@ -70,14 +68,6 @@ class Filing:
     form: str
     primary_document: str
     exhibit_files: dict[str, str]  # exhibit_number -> filename
-
-
-@dataclass
-class ClauseChunk:
-    text: str
-    clause_type: str = "Other"
-    char_start: Optional[int] = None
-    char_end: Optional[int] = None
 
 
 SEC_USER_AGENT = "Precedent-AI/1.0 (research; contact: precedent-ai-dev@example.com)"
@@ -222,42 +212,6 @@ def extract_text_from_html(html: str) -> str:
     return text.strip()
 
 
-def chunk_into_clauses(text: str) -> list[ClauseChunk]:
-    """Chunk contract text into clauses using heuristic section headers."""
-    # Split on major section boundaries
-    section_pattern = r"(?=(?:^|\n)\s*(?:Section|Article|SECTION|ARTICLE)\s+[\dIVX]+\.?\s)"
-    sections = re.split(section_pattern, text, flags=re.IGNORECASE | re.MULTILINE)
-
-    chunks = []
-    char_pos = 0
-
-    for section in sections:
-        if not section.strip():
-            continue
-
-        # Further split on numbered sub-clauses
-        sub_pattern = r"(?=(?:^|\n)\s*(?:\(\w+\)|\d+\.\s))"
-        sub_clauses = re.split(sub_pattern, section, flags=re.MULTILINE)
-
-        for clause in sub_clauses:
-            clause = clause.strip()
-            if len(clause) < 50:  # Skip tiny fragments
-                continue
-
-            chunks.append(ClauseChunk(
-                text=clause[:2000],  # Cap at 2000 chars for classification
-                char_start=char_pos,
-                char_end=char_pos + len(clause),
-            ))
-            char_pos += len(clause) + 1
-
-    # If no sections found, fall back to paragraph chunking
-    if not chunks:
-        paragraphs = [p.strip() for p in text.split("\n\n") if len(p.strip()) > 100]
-        for p in paragraphs:
-            chunks.append(ClauseChunk(text=p[:2000]))
-
-    return chunks[:50]  # Cap at 50 clauses per document
 
 
 async def ingest_edgar_document(
@@ -373,7 +327,7 @@ async def main() -> None:
                 continue
 
     print(f"\n{'=' * 60}")
-    print(f"EDGAR Ingestion Complete!")
+    print("EDGAR Ingestion Complete!")
     print(f"Documents: {total_docs}")
     print(f"Clauses:   {total_clauses}")
     print(f"{'=' * 60}")
