@@ -38,5 +38,13 @@ contain. The baseline is empirical (what this corpus actually shows), not doctri
   comparison document(s) it's based on.
 - Explicitly separate "missing entirely" from "present but worth a second look" —
   they mean different things to whoever reads this.
+- **For each risk finding, output a structured risk readout in this exact format:**
+
+```
+Risk: High
+Reason: Uncapped liability clause found; 85% of comparable contracts cap liability
+```
+
+- Use "Low", "Medium", or "High" for risk level. One risk readout per finding.
 - Close with a one-line disclaimer: this is a pattern comparison against this corpus,
   not legal advice, and a human should review anything flagged before acting on it.
