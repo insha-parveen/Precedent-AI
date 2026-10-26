@@ -5,13 +5,31 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
--- One row per source contract (a CUAD PDF, or an EDGAR exhibit).
+-- Taxonomy tables for extensible clause classification
+CREATE TABLE IF NOT EXISTS clause_taxonomies (
+    id              BIGSERIAL PRIMARY KEY,
+    name            TEXT NOT NULL UNIQUE,          -- e.g., 'CUAD', 'CUSTOM', 'EDGAR_EXTENDED'
+    description     TEXT,
+    is_active       BOOLEAN NOT NULL DEFAULT true,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS clause_categories (
+    id              BIGSERIAL PRIMARY KEY,
+    taxonomy_id     BIGINT NOT NULL REFERENCES clause_taxonomies(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,                 -- Category name (e.g., 'Governing Law')
+    description     TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(taxonomy_id, name)                      -- Ensure category names are unique within a taxonomy
+);
+
+-- One row per source contract (a CUAD PDF, an EDGAR exhibit, or a custom client contract).
 CREATE TABLE IF NOT EXISTS documents (
     id              BIGSERIAL PRIMARY KEY,
-    source          TEXT NOT NULL CHECK (source IN ('cuad', 'edgar')),
-    external_id     TEXT NOT NULL,             -- CUAD filename, or EDGAR accession number
+    source          TEXT NOT NULL CHECK (source IN ('cuad', 'edgar', 'custom')),
+    external_id     TEXT NOT NULL,             -- CUAD filename, or EDGAR accession number, or custom file path
     title           TEXT NOT NULL,
-    doc_type        TEXT,                      -- e.g. 'License Agreement', 'Credit Agreement'
+    doc_type        TEXT,                      -- e.g. 'License Agreement', 'Credit Agreement', 'MSA', 'NDA'
     parties         TEXT[] DEFAULT '{}',
     filing_date     DATE,
     -- Permission simulation: every row belongs to an access group, the same way a real
@@ -30,7 +48,8 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE TABLE IF NOT EXISTS clauses (
     id              BIGSERIAL PRIMARY KEY,
     document_id     BIGINT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-    clause_type     TEXT NOT NULL,              -- one of CUAD's 41 categories, or 'Other'
+    category_id     BIGINT REFERENCES clause_categories(id),  -- Reference to category taxonomy
+    clause_type     TEXT NOT NULL,              -- Kept for backward compatibility during transition
     clause_text     TEXT NOT NULL,
     char_start      INT,
     char_end        INT,
@@ -51,6 +70,9 @@ CREATE INDEX IF NOT EXISTS idx_clauses_tsv
 
 CREATE INDEX IF NOT EXISTS idx_clauses_type
     ON clauses (clause_type);
+
+CREATE INDEX IF NOT EXISTS idx_clauses_category_id
+    ON clauses (category_id);
 
 CREATE INDEX IF NOT EXISTS idx_clauses_access_group
     ON clauses (access_group);

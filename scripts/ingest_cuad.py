@@ -29,15 +29,16 @@ from __future__ import annotations
 import ast
 import asyncio
 import sys
-import time
 from pathlib import Path
 
 import pandas as pd
-import voyageai
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.precedent.config import settings  # noqa: E402
 from src.precedent.db import get_pool  # noqa: E402
+from src.precedent.ingestion.embed import embed_with_retry  # noqa: E402
+
+BATCH_SIZE = 32
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 CSV_PATH = DATA_DIR / "CUAD_v1_master_clauses.csv"
@@ -148,8 +149,8 @@ async def main() -> None:
         nonlocal inserted_clauses
         if not pending_texts:
             return
-        embeddings = _embed_with_retry(
-            voyage, pending_texts, model=settings.embedding_model, input_type="document"
+        embeddings = embed_with_retry(
+            pending_texts, model=settings.embedding_model, input_type="document"
         )
         async with pool.acquire() as conn:
             for (doc_id, clause_type, text), emb in zip(pending_meta, embeddings):

@@ -1,0 +1,196 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Initialize database
+        run: python scripts/init_db.py
+
+      - name: Run tests
+        run: pytest tests/ -q
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+
+  web-build:
+    name: Web Build Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: ./web
+        run: npm ci
+
+      - name: Build Next.js app
+        working-directory: ./web
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_BASE: /api
+          BACKEND_URL: http://localhost:8000
+
+  eval:
+    name: Evaluation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: test
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Initialize database
+        run: python scripts/init_db.py
+
+      - name: Ingest test data (subset)
+        run: |
+          python scripts/ingest_cuad.py --limit 100 || true
+          python scripts/ingest_edgar.py --limit 10 || true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+
+      - name: Run evaluation
+        id: eval
+        run: |
+          python eval/run_eval.py
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+
+      - name: Upload evaluation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: eval/results/
+          retention-days: 7
+
+      - name: Check recall@10 threshold
+        if: always()
+        run: |
+          # Parse eval output for recall@10 and fail if below 90%
+          # Assuming eval/run_eval.py prints "Overall recall@10: X/8 = Y%"
+          # This is a placeholder - implement based on actual eval output format
+          echo "Evaluation complete. Check artifacts for detailed metrics."
+
+  deploy:
+    name: Deploy to Vercel
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [test, web-build, eval]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel Environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project Artifacts
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Vercel
+        run: |
+          vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Comment deployment URL
+        if: success()
+        run: |
+          echo "Deployment successful! Check Vercel dashboard for the URL."

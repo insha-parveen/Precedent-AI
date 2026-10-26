@@ -1,0 +1,204 @@
+@import url("https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap");
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Precedent & DeepJudge Design Tokens.
+   Palette: Warm near-black ink on a warm off-white canvas, with sand borders,
+   signature lilac/violet accents, and rich dark-slate editorial surfaces.
+   --------------------------------------------------------------------------- */
+:root {
+  --ink: #181816;
+  --ink-light: #262623;
+  --canvas: #f3f2ee;
+  --sand: #e6e1d9;
+  --sand-deep: #d8d1c7;
+  --paper: #ffffff;
+
+  /* Signature DeepJudge Lavender & Violet accents */
+  --lavender: #f3f0fc;
+  --lavender-border: #ded7f5;
+  --violet: #7c3aed;
+  --violet-light: #8b5cf6;
+  --violet-glow: rgba(124, 58, 237, 0.15);
+  --lilac: #e8e2f8;
+
+  /* Editorial Dark Surface */
+  --dark-surface: #141412;
+  --dark-card: #1f1f1d;
+  --dark-border: #2e2e2a;
+
+  --ink-60: rgba(24, 24, 22, 0.65);
+  --ink-40: rgba(24, 24, 22, 0.4);
+
+  --font-sans: var(--font-archivo), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), monospace;
+  --font-serif: "Newsreader", var(--font-merriweather), Georgia, serif;
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-ink-light: var(--ink-light);
+  --color-canvas: var(--canvas);
+  --color-sand: var(--sand);
+  --color-sand-deep: var(--sand-deep);
+  --color-paper: var(--paper);
+  --color-lavender: var(--lavender);
+  --color-lavender-border: var(--lavender-border);
+  --color-violet: var(--violet);
+  --color-violet-light: var(--violet-light);
+  --color-lilac: var(--lilac);
+  --color-dark-surface: var(--dark-surface);
+  --color-dark-card: var(--dark-card);
+  --color-dark-border: var(--dark-border);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-serif: var(--font-serif);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5.5rem;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------------------------------------------------------------------------
+   Motion primitives.
+   Elements animated by GSAP are given `data-reveal` and start hidden; the GSAP
+   timelines own the transition from there. If JavaScript never runs, the
+   fallback below keeps the content visible rather than permanently invisible.
+   --------------------------------------------------------------------------- */
+/* Scoped to .js (set by an inline script in layout.tsx) so a no-JS visitor sees
+   the content instead of an invisible page. */
+.js [data-reveal] {
+  opacity: 0;
+}
+
+/* Scroll progress bar pinned to the top edge of the viewport. */
+/* Pipeline rows light up as each crosses the viewport centre (data-pipeline-row). */
+[data-pipeline-row] {
+  position: relative;
+}
+
+[data-pipeline-row]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--canvas);
+  transform: scaleY(0);
+  transform-origin: top center;
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-pipeline-row].is-active::before {
+  transform: scaleY(1);
+}
+
+[data-pipeline-row].is-active [data-step-num] {
+  color: var(--canvas);
+}
+
+/* Keep the magnetic CTA from clipping its own hover transform. */
+[data-magnetic] {
+  will-change: transform;
+}
+
+.scroll-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--ink);
+  transform-origin: left center;
+  transform: scaleX(0);
+  z-index: 60;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Marquee: the track is translated by GSAP; needs a non-shrinking child row. */
+.marquee-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+}
+
+/* Cursor-follow hover target used on capability cards. */
+.hover-lift {
+  transition:
+    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.3s ease,
+    border-color 0.3s ease;
+}
+
+.hover-lift:hover {
+  transform: translate3d(0, -4px, 0);
+}
+
+/* Underline that draws in on hover, used on nav and footer links. */
+.link-underline {
+  position: relative;
+}
+
+.link-underline::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 100%;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: right center;
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.link-underline:hover::after {
+  transform: scaleX(1);
+  transform-origin: left center;
+}
+
+/* Focus visible for accessibility */
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: var(--ink);
+  color: var(--canvas);
+}

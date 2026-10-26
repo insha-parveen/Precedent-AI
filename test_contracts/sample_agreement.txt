@@ -1,0 +1,42 @@
+MASTER SERVICES AGREEMENT
+
+This Master Services Agreement ("Agreement") is entered into as of January 1, 2024 ("Effective Date") by and between Acme Corporation ("Client") and Beta Services LLC ("Provider").
+
+Section 1. Services
+1.1 Provider shall perform the services described in each Statement of Work ("SOW") executed by the parties.
+1.2 Provider shall perform the services in a professional and workmanlike manner.
+
+Section 2. Fees and Payment
+2.1 Client shall pay Provider the fees set forth in each SOW.
+2.2 Payment terms are Net 30 days from invoice date.
+2.3 Late payments shall bear interest at 1.5% per month.
+
+Section 3. Confidentiality
+3.1 Each party agrees to hold the other's confidential information in strict confidence.
+3.2 Confidential information includes all non-public business information.
+
+Section 4. Term and Termination
+4.1 This Agreement commences on the Effective Date and continues for two (2) years.
+4.2 Either party may terminate for convenience upon sixty (60) days written notice.
+4.3 Either party may terminate for cause upon thirty (30) days written notice of material breach.
+
+Section 5. Governing Law
+5.1 This Agreement shall be governed by the laws of the State of Delaware.
+
+Section 6. Limitation of Liability
+6.1 Neither party's total liability shall exceed the fees paid in the twelve (12) months preceding the claim.
+6.2 Neither party shall be liable for indirect, consequential, or punitive damages.
+
+Section 7. Intellectual Property
+7.1 All work product created by Provider shall be owned by Client.
+7.2 Provider grants Client a perpetual, irrevocable license to use any pre-existing IP.
+
+Section 8. Non-Solicitation
+8.1 During the term and for twelve (12) months thereafter, neither party shall solicit the other's employees.
+
+Section 9. Force Majeure
+9.1 Neither party is liable for delays caused by events beyond their reasonable control.
+
+Section 10. General
+10.1 This Agreement constitutes the entire agreement between the parties.
+10.2 Amendments must be in writing and signed by both parties.

@@ -53,7 +53,7 @@ async def main() -> None:
     for q in queries:
         start = time.monotonic()
         results = await hybrid_search(
-            pool, q["query"], access_groups=["public"], limit=q.get("k", 10)
+            pool, q["query"], access_groups=["public"], limit=q.get("k", 10), do_rerank=None
         )
         latency_ms = int((time.monotonic() - start) * 1000)
 

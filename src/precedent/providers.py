@@ -1,8 +1,9 @@
-from typing import Protocol, Any, List, Optional, Dict
-from dataclasses import dataclass, field
 import json
 import logging
-import re
+import time
+from dataclasses import dataclass, field
+from typing import Any, Protocol
+
 from .config import settings
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ class LLMProvider(Protocol):
 
 import anthropic
 from google import genai
+
 
 class GeminiProvider:
     def __init__(self, api_key: str):
@@ -137,11 +139,25 @@ class GeminiProvider:
         if function_declarations:
             config.tools = [{"function_declarations": function_declarations}]
 
-        response = self.client.models.generate_content(
-            model=model or "gemini-3.1-flash-lite",
-            contents=contents,
-            config=config
-        )
+        response = None
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                response = self.client.models.generate_content(
+                    model=model or "gemini-3.1-flash-lite",
+                    contents=contents,
+                    config=config
+                )
+                break
+            except Exception as exc:
+                if is_transient_error(exc) and attempt < max_attempts - 1:
+                    logger.warning(
+                        f"Gemini generate_content transient error: {exc}. "
+                        f"Retrying attempt {attempt + 2}/{max_attempts}..."
+                    )
+                    time.sleep(2.0 * (attempt + 1))
+                    continue
+                raise exc
 
         content_items = []
         tool_calls = []
@@ -240,6 +256,7 @@ class AnthropicProvider:
         )
 
 import openai
+
 
 class GrokProvider:
     """Provider for xAI Grok or OpenAI-compatible endpoints."""
